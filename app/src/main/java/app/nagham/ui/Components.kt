@@ -56,6 +56,7 @@ import kotlinx.coroutines.launch
 
 val LocalApp = staticCompositionLocalOf<AppContainer> { error("AppContainer غير متوفر") }
 val LocalFavorites = staticCompositionLocalOf<Set<String>> { emptySet() }
+val LocalDownloaded = staticCompositionLocalOf<Set<String>> { emptySet() }
 
 @Composable
 inline fun <reified T : ViewModel> appViewModel(crossinline create: (AppContainer) -> T): T {
@@ -112,6 +113,9 @@ fun TrackRow(
     val c = LocalApp.current
     val scope = rememberCoroutineScope()
     val fav = track.id in LocalFavorites.current
+    val downloaded = track.id in LocalDownloaded.current
+    val progress by c.downloads.progress.collectAsState()
+    val pct = progress[track.id]
     var menu by remember { mutableStateOf(false) }
     var picker by remember { mutableStateOf(false) }
 
@@ -132,7 +136,11 @@ fun TrackRow(
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Text(
-                track.artist,
+                track.artist + when {
+                    pct != null -> "  ·  جارٍ التنزيل $pct٪"
+                    downloaded -> "  ·  ✓ محمّلة"
+                    else -> ""
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -151,6 +159,11 @@ fun TrackRow(
                 DropdownMenuItem(text = { Text("تشغيل تالياً") }, onClick = { menu = false; c.player.playNext(track) })
                 DropdownMenuItem(text = { Text("إضافة إلى قائمة الانتظار") }, onClick = { menu = false; c.player.enqueue(track) })
                 DropdownMenuItem(text = { Text("إضافة إلى قائمة تشغيل") }, onClick = { menu = false; picker = true })
+                if (downloaded) {
+                    DropdownMenuItem(text = { Text("حذف التنزيل") }, onClick = { menu = false; c.downloads.delete(track) })
+                } else if (track.downloadable && pct == null) {
+                    DropdownMenuItem(text = { Text("تحميل للاستماع دون إنترنت") }, onClick = { menu = false; c.downloads.download(track) })
+                }
                 if (onRemove != null) {
                     DropdownMenuItem(text = { Text("إزالة من هذه القائمة") }, onClick = { menu = false; onRemove() })
                 }

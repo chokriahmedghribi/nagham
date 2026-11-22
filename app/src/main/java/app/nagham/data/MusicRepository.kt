@@ -5,6 +5,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.io.IOException
 import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
@@ -153,7 +154,31 @@ class MusicRepository(private val dao: MusicDao, private val prefs: SharedPrefer
 
     suspend fun jamendoArabic(): List<Track> = jamendo(lang = "ar", order = "popularity_month")
 
-    fun streamUrl(track: Track): String = track.streamUrl ?: "$host/v1/tracks/${track.id}/stream?app_name=$APP_NAME"
+    // ---------- التنزيلات ----------
+
+    private val localPaths = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    fun observeDownloads(scope: kotlinx.coroutines.CoroutineScope) {
+        scope.launch {
+            dao.downloads().collect { list ->
+                localPaths.clear()
+                list.forEach { if (java.io.File(it.path).exists()) localPaths[it.trackId] = it.path }
+            }
+        }
+    }
+
+    fun downloadedIds(): Flow<List<String>> = dao.downloadedIds()
+    fun downloadedTracks(): Flow<List<Track>> = dao.downloadedTracks()
+    suspend fun addDownload(d: Download) = dao.addDownload(d)
+    suspend fun removeDownload(id: String) = dao.removeDownload(id)
+    suspend fun saveTrack(track: Track) = dao.upsertTracks(listOf(track))
+
+    fun remoteUrl(track: Track): String =
+        track.streamUrl ?: "$host/v1/tracks/${track.id}/stream?app_name=$APP_NAME"
+
+    /** يفضّل الملف المحمّل محلياً إن وُجد. */
+    fun streamUrl(track: Track): String =
+        localPaths[track.id]?.let { android.net.Uri.fromFile(java.io.File(it)).toString() } ?: remoteUrl(track)
 
     suspend fun lyrics(track: Track): Lyrics? = runCatching {
         val d = lrclib.get(track.artist, track.title, track.durationSec)

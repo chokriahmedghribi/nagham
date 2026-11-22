@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.PlayArrow
@@ -74,6 +75,13 @@ fun LibraryScreen(onOpenPlaylist: (Long) -> Unit) {
                 title = "الأغاني المفضلة",
                 icon = { Icon(Icons.Filled.Favorite, null, tint = MaterialTheme.colorScheme.primary) },
                 onClick = { onOpenPlaylist(0L) },
+            )
+        }
+        item {
+            LibraryEntry(
+                title = "التنزيلات (دون إنترنت)",
+                icon = { Icon(Icons.Filled.Download, null, tint = MaterialTheme.colorScheme.secondary) },
+                onClick = { onOpenPlaylist(-1L) },
             )
         }
         items(playlists, key = { it.id }) { p ->
@@ -142,10 +150,19 @@ fun PlaylistScreen(id: Long, onBack: () -> Unit) {
     val c = LocalApp.current
     val scope = rememberCoroutineScope()
     val isFavorites = id == 0L
-    val tracks by (if (isFavorites) c.repo.favoriteTracks() else c.repo.playlistTracks(id))
+    val isDownloads = id == -1L
+    val tracks by (when {
+        isFavorites -> c.repo.favoriteTracks()
+        isDownloads -> c.repo.downloadedTracks()
+        else -> c.repo.playlistTracks(id)
+    })
         .collectAsState(initial = emptyList())
     val playlists by c.repo.playlists().collectAsState(initial = emptyList())
-    val title = if (isFavorites) "الأغاني المفضلة" else playlists.firstOrNull { it.id == id }?.name ?: ""
+    val title = when {
+        isFavorites -> "الأغاني المفضلة"
+        isDownloads -> "التنزيلات"
+        else -> playlists.firstOrNull { it.id == id }?.name ?: ""
+    }
     val ps by c.player.state.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
 
@@ -153,7 +170,7 @@ fun PlaylistScreen(id: Long, onBack: () -> Unit) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
             Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-            if (!isFavorites) {
+            if (!isFavorites && !isDownloads) {
                 IconButton(onClick = { confirmDelete = true }) { Icon(Icons.Filled.Delete, "حذف القائمة") }
             }
         }
@@ -178,8 +195,10 @@ fun PlaylistScreen(id: Long, onBack: () -> Unit) {
                     t,
                     onClick = { c.player.playTracks(tracks, i) },
                     isCurrent = ps.current?.id == t.id,
-                    onRemove = if (isFavorites) null else {
-                        { scope.launch { c.repo.removeFromPlaylist(id, t.id) }; Unit }
+                    onRemove = when {
+                        isFavorites -> null
+                        isDownloads -> { { c.downloads.delete(t) } }
+                        else -> { { scope.launch { c.repo.removeFromPlaylist(id, t.id) }; Unit } }
                     },
                 )
             }

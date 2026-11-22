@@ -16,6 +16,16 @@ data class Track(
     val source: String = "audius",
     /** رابط بث مباشر (Jamendo)؛ فارغ لـ Audius لأن مضيفه يُكتشف وقت التشغيل */
     val streamUrl: String? = null,
+    /** يسمح صاحب العمل بتحميله */
+    val downloadable: Boolean = false,
+)
+
+@Entity(tableName = "downloads")
+data class Download(
+    @PrimaryKey val trackId: String,
+    val path: String,
+    val bytes: Long,
+    val downloadedAt: Long = System.currentTimeMillis(),
 )
 
 @Entity(tableName = "playlists")

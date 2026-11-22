@@ -76,6 +76,7 @@ data class JamendoTrackDto(
     @SerialName("artist_name") val artistName: String = "",
     val image: String? = null,
     val audio: String? = null,
+    @SerialName("audiodownload_allowed") val downloadAllowed: Boolean = false,
     val musicinfo: JsonElement? = null,
 ) {
     fun toTrack(): Track {
@@ -90,6 +91,7 @@ data class JamendoTrackDto(
             mood = null,
             source = "jamendo",
             streamUrl = audio,
+            downloadable = downloadAllowed,
         )
     }
 }
@@ -110,6 +112,7 @@ data class TrackDto(
     val artwork: ArtworkDto? = null,
     val user: UserDto? = null,
     @SerialName("is_streamable") val isStreamable: Boolean = true,
+    @SerialName("is_downloadable") val isDownloadable: Boolean = false,
 ) {
     fun toTrack() = Track(
         id = id,
@@ -119,6 +122,7 @@ data class TrackDto(
         durationSec = duration,
         genre = genre?.takeIf { it.isNotBlank() },
         mood = mood?.takeIf { it.isNotBlank() },
+        downloadable = isDownloadable,
     )
 }
 

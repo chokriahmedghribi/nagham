@@ -13,6 +13,7 @@ fun Track.toMediaItem(streamUrl: String): MediaItem {
         putInt("dur", durationSec)
         putString("src", source)
         putString("stream", this@toMediaItem.streamUrl)
+        putBoolean("dl", downloadable)
     }
     return MediaItem.Builder()
         .setMediaId(id)
@@ -42,5 +43,6 @@ fun MediaItem.toTrack(): Track {
         mood = x?.getString("mood"),
         source = x?.getString("src") ?: "audius",
         streamUrl = x?.getString("stream"),
+        downloadable = x?.getBoolean("dl") ?: false,
     )
 }

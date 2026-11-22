@@ -6,6 +6,8 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -56,6 +58,22 @@ interface MusicDao {
     )
     fun favoriteTracks(): Flow<List<Track>>
 
+    // التنزيلات
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addDownload(d: Download)
+
+    @Query("DELETE FROM downloads WHERE trackId = :id")
+    suspend fun removeDownload(id: String)
+
+    @Query("SELECT * FROM downloads")
+    fun downloads(): Flow<List<Download>>
+
+    @Query("SELECT trackId FROM downloads")
+    fun downloadedIds(): Flow<List<String>>
+
+    @Query("SELECT t.* FROM tracks t JOIN downloads d ON t.id = d.trackId ORDER BY d.downloadedAt DESC")
+    fun downloadedTracks(): Flow<List<Track>>
+
     // سجل الاستماع
     @Insert
     suspend fun insertEvent(e: PlayEvent)
@@ -65,10 +83,20 @@ interface MusicDao {
 }
 
 @Database(
-    entities = [Track::class, Playlist::class, PlaylistTrack::class, Favorite::class, PlayEvent::class],
-    version = 2,
+    entities = [Track::class, Playlist::class, PlaylistTrack::class, Favorite::class, PlayEvent::class, Download::class],
+    version = 3,
     exportSchema = false,
 )
 abstract class NaghamDb : RoomDatabase() {
     abstract fun dao(): MusicDao
+}
+
+val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE tracks ADD COLUMN downloadable INTEGER NOT NULL DEFAULT 0")
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS downloads (trackId TEXT NOT NULL, path TEXT NOT NULL, " +
+                "bytes INTEGER NOT NULL, downloadedAt INTEGER NOT NULL, PRIMARY KEY(trackId))"
+        )
+    }
 }

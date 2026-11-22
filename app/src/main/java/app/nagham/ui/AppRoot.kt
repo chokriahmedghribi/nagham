@@ -45,11 +45,21 @@ fun AppRoot(container: AppContainer) {
     val nav = rememberNavController()
     val favIds by container.repo.favoriteIds().collectAsState(initial = emptyList())
     val favSet = remember(favIds) { favIds.toSet() }
+    val dlIds by container.repo.downloadedIds().collectAsState(initial = emptyList())
+    val dlSet = remember(dlIds) { dlIds.toSet() }
+    val dlError by container.downloads.error.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(dlError) {
+        dlError?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            container.downloads.clearError()
+        }
+    }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
     val fullScreen = route == "player" || route == "audio" || route == "sources"
 
-    CompositionLocalProvider(LocalApp provides container, LocalFavorites provides favSet) {
+    CompositionLocalProvider(LocalApp provides container, LocalFavorites provides favSet, LocalDownloaded provides dlSet) {
         Scaffold(
             bottomBar = {
                 if (route != "player") {
