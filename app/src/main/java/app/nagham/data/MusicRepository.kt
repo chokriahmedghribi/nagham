@@ -1,6 +1,12 @@
 package app.nagham.data
 
+import android.content.SharedPreferences
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.io.IOException
+import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -19,7 +25,7 @@ import java.util.concurrent.TimeUnit
 
 private const val FALLBACK_HOST = "https://discoveryprovider.audius.co"
 
-class MusicRepository(private val dao: MusicDao) {
+class MusicRepository(private val dao: MusicDao, private val prefs: SharedPreferences) {
 
     private val json = Json { ignoreUnknownKeys = true; coerceInputValues = true }
     private val http = OkHttpClient.Builder()
@@ -69,10 +75,24 @@ class MusicRepository(private val dao: MusicDao) {
         block(api())
     }
 
-    suspend fun search(query: String): List<Track> {
+    private suspend fun audiusSearch(query: String): List<Track> {
         val tracks = withApi { it.search(query) }.data.filter { it.isStreamable }.map { it.toTrack() }
         dao.upsertTracks(tracks)
         return tracks
+    }
+
+    /** بحث موحّد: Jamendo (إن أُضيف المفتاح) + Audius، بنتائج متداخلة. */
+    suspend fun search(query: String): List<Track> = coroutineScope {
+        val a = async { runCatching { audiusSearch(query) } }
+        val j = if (hasJamendo) async { runCatching { jamendo(search = query) } } else null
+        val ra = a.await()
+        val rj = j?.await()
+        val lists = listOfNotNull(rj?.getOrNull(), ra.getOrNull())
+        if (lists.isEmpty()) throw (rj?.exceptionOrNull() ?: ra.exceptionOrNull() ?: IOException("لا نتائج"))
+        val out = ArrayList<Track>()
+        val max = lists.maxOf { it.size }
+        for (i in 0 until max) lists.forEach { l -> l.getOrNull(i)?.let(out::add) }
+        out.distinctBy { it.id }
     }
 
     suspend fun trending(genre: String? = null): List<Track> {
@@ -90,7 +110,50 @@ class MusicRepository(private val dao: MusicDao) {
         (if (filtered.size >= 10) filtered else all).shuffled()
     }
 
-    fun streamUrl(track: Track): String = "$host/v1/tracks/${track.id}/stream?app_name=$APP_NAME"
+    // ---------- Jamendo ----------
+
+    private val _sourcesVersion = MutableStateFlow(0)
+    val sourcesVersion: StateFlow<Int> = _sourcesVersion.asStateFlow()
+
+    val jamendoId: String get() = prefs.getString("jamendo_id", "")?.trim().orEmpty()
+    val hasJamendo: Boolean get() = jamendoId.isNotEmpty()
+
+    fun setJamendoId(value: String) {
+        prefs.edit().putString("jamendo_id", value.trim()).apply()
+        _sourcesVersion.value += 1
+    }
+
+    private val jamendoApi: JamendoApi by lazy { retrofit("https://api.jamendo.com/").create(JamendoApi::class.java) }
+
+    private suspend fun jamendo(
+        search: String? = null,
+        order: String? = null,
+        lang: String? = null,
+        dateBetween: String? = null,
+        limit: Int = 30,
+    ): List<Track> {
+        val r = jamendoApi.tracks(
+            clientId = jamendoId, limit = limit, search = search,
+            order = order, lang = lang, dateBetween = dateBetween,
+        )
+        val h = r.headers
+        if (h != null && h.status.isNotEmpty() && h.status != "success") {
+            throw IllegalStateException("Jamendo: " + h.errorMessage.ifBlank { "طلب مرفوض (تحقق من المفتاح)" })
+        }
+        val tracks = r.results.filter { !it.audio.isNullOrBlank() }.map { it.toTrack() }
+        dao.upsertTracks(tracks)
+        return tracks
+    }
+
+    /** الأكثر رواجاً بين الإصدارات الحديثة (آخر 4 أشهر). */
+    suspend fun jamendoLatest(): List<Track> {
+        val to = LocalDate.now()
+        return jamendo(order = "popularity_week", dateBetween = "${to.minusDays(120)}_$to")
+    }
+
+    suspend fun jamendoArabic(): List<Track> = jamendo(lang = "ar", order = "popularity_month")
+
+    fun streamUrl(track: Track): String = track.streamUrl ?: "$host/v1/tracks/${track.id}/stream?app_name=$APP_NAME"
 
     suspend fun lyrics(track: Track): Lyrics? = runCatching {
         val d = lrclib.get(track.artist, track.title, track.durationSec)

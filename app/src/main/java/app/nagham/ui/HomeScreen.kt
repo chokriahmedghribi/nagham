@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,6 +22,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -40,27 +42,33 @@ import kotlinx.coroutines.launch
 class HomeVM(private val c: AppContainer) : ViewModel() {
     val forYou = MutableStateFlow<List<Track>>(emptyList())
     val trending = MutableStateFlow<List<Track>>(emptyList())
+    val latest = MutableStateFlow<List<Track>>(emptyList())
+    val arabic = MutableStateFlow<List<Track>>(emptyList())
     val loading = MutableStateFlow(true)
     val error = MutableStateFlow<String?>(null)
-
-    init { refresh() }
 
     fun refresh() {
         viewModelScope.launch {
             loading.value = true
             error.value = null
-            try {
-                val (t, f) = coroutineScope {
-                    val a = async { c.repo.trending() }
-                    val b = async { c.recommender.forYou() }
-                    a.await() to b.await()
+            val hasJ = c.repo.hasJamendo
+            coroutineScope {
+                val t = async { runCatching { c.repo.trending() } }
+                val f = async { runCatching { c.recommender.forYou() } }
+                val l = if (hasJ) async { runCatching { c.repo.jamendoLatest() } } else null
+                val a = if (hasJ) async { runCatching { c.repo.jamendoArabic() } } else null
+                val rt = t.await(); val rf = f.await(); val rl = l?.await(); val ra = a?.await()
+                trending.value = rt.getOrDefault(emptyList())
+                forYou.value = rf.getOrDefault(emptyList())
+                latest.value = rl?.getOrNull().orEmpty()
+                arabic.value = ra?.getOrNull().orEmpty()
+                val results = listOfNotNull(rt, rl, ra)
+                if (results.none { it.isSuccess }) {
+                    error.value = "تعذّر الاتصال بالإنترنت. تحقق من الشبكة وأعد المحاولة."
+                } else {
+                    // مفتاح Jamendo خاطئ مثلاً: نعرض سببه بدل الصمت
+                    rl?.exceptionOrNull()?.message?.let { if (it.startsWith("Jamendo")) error.value = it }
                 }
-                trending.value = t
-                forYou.value = f
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                error.value = "تعذّر الاتصال بالإنترنت. تحقق من الشبكة وأعد المحاولة."
             }
             loading.value = false
         }
@@ -68,7 +76,7 @@ class HomeVM(private val c: AppContainer) : ViewModel() {
 }
 
 @Composable
-fun HomeScreen(onAudio: () -> Unit) {
+fun HomeScreen(onAudio: () -> Unit, onSources: () -> Unit) {
     val c = LocalApp.current
     val vm = appViewModel { HomeVM(it) }
     val forYou by vm.forYou.collectAsState()
@@ -78,6 +86,11 @@ fun HomeScreen(onAudio: () -> Unit) {
     val mode by c.modes.mode.collectAsState()
     val modeError by c.modes.error.collectAsState()
     val ps by c.player.state.collectAsState()
+    val latest by vm.latest.collectAsState()
+    val arabic by vm.arabic.collectAsState()
+    val version by c.repo.sourcesVersion.collectAsState()
+    LaunchedEffect(version) { vm.refresh() }
+    val hasJamendo = c.repo.hasJamendo
 
     LazyColumn(Modifier.fillMaxWidth()) {
         item {
@@ -87,7 +100,10 @@ fun HomeScreen(onAudio: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text("نغمة", style = MaterialTheme.typography.headlineMedium)
-                IconButton(onClick = onAudio) { Icon(Icons.Filled.Tune, "إعدادات الصوت") }
+                Row {
+                    IconButton(onClick = onSources) { Icon(Icons.Filled.Settings, "المصادر") }
+                    IconButton(onClick = onAudio) { Icon(Icons.Filled.Tune, "إعدادات الصوت") }
+                }
             }
         }
         item {
@@ -120,6 +136,39 @@ fun HomeScreen(onAudio: () -> Unit) {
             }
         }
 
+        if (!hasJamendo) {
+            item {
+                androidx.compose.foundation.layout.Column(
+                    Modifier.fillMaxWidth().padding(16.dp)
+                ) {
+                    Text("أحدث الأغاني والأغاني العربية", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "أضف مفتاح Jamendo المجاني لتظهر أغانٍ كاملة حديثة وعربية، وتُدمج نتائجه في البحث.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 4.dp),
+                    )
+                    Button(onClick = onSources) { Text("إضافة المفتاح") }
+                }
+            }
+        }
+        if (latest.isNotEmpty()) {
+            item {
+                SectionTitle("أحدث الأغاني")
+                LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) { itemsIndexed(latest) { i, t -> TrackCard(t) { c.player.playTracks(latest, i) } } }
+            }
+        }
+        if (arabic.isNotEmpty()) {
+            item {
+                SectionTitle("أغانٍ عربية")
+                LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) { itemsIndexed(arabic) { i, t -> TrackCard(t) { c.player.playTracks(arabic, i) } } }
+            }
+        }
         if (forYou.isNotEmpty()) {
             item {
                 SectionTitle("مقترحة لك")

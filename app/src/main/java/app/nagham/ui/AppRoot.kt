@@ -47,14 +47,14 @@ fun AppRoot(container: AppContainer) {
     val favSet = remember(favIds) { favIds.toSet() }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route
-    val fullScreen = route == "player" || route == "audio"
+    val fullScreen = route == "player" || route == "audio" || route == "sources"
 
     CompositionLocalProvider(LocalApp provides container, LocalFavorites provides favSet) {
         Scaffold(
             bottomBar = {
                 if (route != "player") {
                     Column {
-                        if (route != "audio") MiniPlayer(onOpen = { nav.navigate("player") })
+                        if (route != "audio" && route != "sources") MiniPlayer(onOpen = { nav.navigate("player") })
                         if (!fullScreen) {
                             NavigationBar {
                                 tabs.forEach { tab ->
@@ -78,7 +78,8 @@ fun AppRoot(container: AppContainer) {
             },
         ) { pad ->
             NavHost(nav, startDestination = "home", modifier = Modifier.padding(pad)) {
-                composable("home") { HomeScreen(onAudio = { nav.navigate("audio") }) }
+                composable("home") { HomeScreen(onAudio = { nav.navigate("audio") }, onSources = { nav.navigate("sources") }) }
+                composable("sources") { SourcesScreen(onBack = { nav.popBackStack() }) }
                 composable("search") { SearchScreen() }
                 composable("library") { LibraryScreen(onOpenPlaylist = { nav.navigate("playlist/$it") }) }
                 composable(

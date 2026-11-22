@@ -12,6 +12,10 @@ data class Track(
     val durationSec: Int,
     val genre: String?,
     val mood: String?,
+    /** audius أو jamendo */
+    val source: String = "audius",
+    /** رابط بث مباشر (Jamendo)؛ فارغ لـ Audius لأن مضيفه يُكتشف وقت التشغيل */
+    val streamUrl: String? = null,
 )
 
 @Entity(tableName = "playlists")

@@ -66,7 +66,7 @@ interface MusicDao {
 
 @Database(
     entities = [Track::class, Playlist::class, PlaylistTrack::class, Favorite::class, PlayEvent::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class NaghamDb : RoomDatabase() {

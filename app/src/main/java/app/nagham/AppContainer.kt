@@ -19,11 +19,13 @@ class AppContainer(context: Context) {
     private val app = context.applicationContext
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    val db: NaghamDb = Room.databaseBuilder(app, NaghamDb::class.java, "nagham.db").build()
+    val db: NaghamDb = Room.databaseBuilder(app, NaghamDb::class.java, "nagham.db")
+        .fallbackToDestructiveMigration()
+        .build()
     val dao get() = db.dao()
     private val prefs = app.getSharedPreferences("nagham", Context.MODE_PRIVATE)
 
-    val repo = MusicRepository(db.dao())
+    val repo = MusicRepository(db.dao(), prefs)
     val recommender = RecommendationEngine(repo, db.dao())
 
     val eq = EqualizerController(prefs)
