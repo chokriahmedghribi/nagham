@@ -1,0 +1,13 @@
+package app.nagham
+
+import android.app.Application
+
+class NaghamApp : Application() {
+    lateinit var container: AppContainer
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        container = AppContainer(this)
+    }
+}
