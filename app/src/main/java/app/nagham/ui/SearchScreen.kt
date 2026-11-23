@@ -74,7 +74,19 @@ class SearchVM(private val c: AppContainer) : ViewModel() {
                 }
                 loading.value = true
                 try {
-                    results.value = c.repo.search(q.trim())
+                    val sp = if (c.spotify.connected.value) {
+                        kotlinx.coroutines.coroutineScope {
+                            val a = kotlinx.coroutines.async { runCatching { c.repo.search(q.trim()) } }
+                            val b = kotlinx.coroutines.async { runCatching { c.spotify.search(q.trim()) } }
+                            val ra = a.await(); val rb = b.await()
+                            val lists = listOfNotNull(ra.getOrNull(), rb.getOrNull())
+                            if (lists.isEmpty()) throw (ra.exceptionOrNull() ?: java.io.IOException())
+                            val out = ArrayList<Track>()
+                            for (i in 0 until lists.maxOf { it.size }) lists.forEach { l -> l.getOrNull(i)?.let(out::add) }
+                            out.distinctBy { it.id }
+                        }
+                    } else c.repo.search(q.trim())
+                    results.value = sp
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
         )
         val container = (application as NaghamApp).container
+        intent?.data?.let(container.spotify::handleRedirect)
         setContent {
             NaghamTheme {
                 val askNotifications = rememberLauncherForActivityResult(
@@ -33,5 +34,10 @@ class MainActivity : ComponentActivity() {
                 AppRoot(container)
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        intent.data?.let((application as NaghamApp).container.spotify::handleRedirect)
     }
 }

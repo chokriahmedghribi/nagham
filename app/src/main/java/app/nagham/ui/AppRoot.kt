@@ -48,7 +48,14 @@ fun AppRoot(container: AppContainer) {
     val dlIds by container.repo.downloadedIds().collectAsState(initial = emptyList())
     val dlSet = remember(dlIds) { dlIds.toSet() }
     val dlError by container.downloads.error.collectAsState()
+    val spMsg by container.spotify.message.collectAsState()
     val context = androidx.compose.ui.platform.LocalContext.current
+    androidx.compose.runtime.LaunchedEffect(spMsg) {
+        spMsg?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            container.spotify.clearMessage()
+        }
+    }
     androidx.compose.runtime.LaunchedEffect(dlError) {
         dlError?.let {
             android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
@@ -64,6 +71,7 @@ fun AppRoot(container: AppContainer) {
             bottomBar = {
                 if (route != "player") {
                     Column {
+                        if (route != "audio" && route != "sources") SpotifyBar()
                         if (route != "audio" && route != "sources") MiniPlayer(onOpen = { nav.navigate("player") })
                         if (!fullScreen) {
                             NavigationBar {

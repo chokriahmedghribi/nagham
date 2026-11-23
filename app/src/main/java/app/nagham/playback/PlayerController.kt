@@ -9,6 +9,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import app.nagham.data.MusicRepository
 import app.nagham.data.Track
+import app.nagham.spotify.SpotifyController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,7 @@ data class PlayerUiState(
 class PlayerController(
     private val ctx: Context,
     private val repo: MusicRepository,
+    private val spotify: SpotifyController,
     scope: CoroutineScope,
 ) {
     private val _state = MutableStateFlow(PlayerUiState())
@@ -97,15 +99,31 @@ class PlayerController(
 
     fun playTracks(tracks: List<Track>, startIndex: Int = 0) {
         if (tracks.isEmpty()) return
-        val items = tracks.map { it.toMediaItem(repo.streamUrl(it)) }
+        val start = tracks[startIndex.coerceIn(0, tracks.lastIndex)]
+        if (start.source == "spotify") {
+            // التشغيل يتم داخل تطبيق Spotify؛ نوقف المشغّل المحلي كي لا يعملا معاً
+            withController { it.pause() }
+            val uris = tracks.drop(tracks.indexOf(start)).filter { it.source == "spotify" }.mapNotNull { it.streamUrl }
+            spotify.playUris(uris)
+            return
+        }
+        spotify.pauseIfActive()
+        val local = tracks.filter { it.source != "spotify" }
+        val localStart = local.indexOfFirst { it.id == start.id }.coerceAtLeast(0)
+        val items = local.map { it.toMediaItem(repo.streamUrl(it)) }
         withController { c ->
-            c.setMediaItems(items, startIndex.coerceIn(0, items.lastIndex), 0L)
+            c.setMediaItems(items, localStart, 0L)
             c.prepare()
             c.play()
         }
     }
 
-    fun playNext(track: Track) = withController { c ->
+    fun playNext(track: Track) {
+        if (track.source == "spotify") { track.streamUrl?.let(spotify::addToQueue); return }
+        playNextLocal(track)
+    }
+
+    private fun playNextLocal(track: Track) = withController { c ->
         val item = track.toMediaItem(repo.streamUrl(track))
         if (c.mediaItemCount == 0) {
             c.setMediaItem(item); c.prepare(); c.play()
@@ -114,7 +132,12 @@ class PlayerController(
         }
     }
 
-    fun enqueue(track: Track) = withController { c ->
+    fun enqueue(track: Track) {
+        if (track.source == "spotify") { track.streamUrl?.let(spotify::addToQueue); return }
+        enqueueLocal(track)
+    }
+
+    private fun enqueueLocal(track: Track) = withController { c ->
         val item = track.toMediaItem(repo.streamUrl(track))
         val wasEmpty = c.mediaItemCount == 0
         c.addMediaItem(item)

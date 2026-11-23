@@ -11,6 +11,7 @@ import app.nagham.playback.FadeController
 import app.nagham.playback.PlayerController
 import app.nagham.playback.SleepTimerController
 import app.nagham.reco.ModeManager
+import app.nagham.spotify.SpotifyController
 import app.nagham.reco.RecommendationEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +37,8 @@ class AppContainer(context: Context) {
     val sleep = SleepTimerController()
     val fade = FadeController(prefs, sleep)
 
-    val player = PlayerController(app, repo, scope)
+    val spotify = SpotifyController(app, prefs, scope)
+    val player = PlayerController(app, repo, spotify, scope)
     val modes = ModeManager(repo, player, sleep, scope)
 
     init {

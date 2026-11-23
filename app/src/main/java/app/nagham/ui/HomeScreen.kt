@@ -44,6 +44,8 @@ class HomeVM(private val c: AppContainer) : ViewModel() {
     val trending = MutableStateFlow<List<Track>>(emptyList())
     val latest = MutableStateFlow<List<Track>>(emptyList())
     val arabic = MutableStateFlow<List<Track>>(emptyList())
+    val spNew = MutableStateFlow<List<Track>>(emptyList())
+    val spArabic = MutableStateFlow<List<Track>>(emptyList())
     val loading = MutableStateFlow(true)
     val error = MutableStateFlow<String?>(null)
 
@@ -57,6 +59,10 @@ class HomeVM(private val c: AppContainer) : ViewModel() {
                 val f = async { runCatching { c.recommender.forYou() } }
                 val l = if (hasJ) async { runCatching { c.repo.jamendoLatest() } } else null
                 val a = if (hasJ) async { runCatching { c.repo.jamendoArabic() } } else null
+                val sn = if (c.spotify.connected.value) async { c.spotify.discover(listOf("top hits 2026", "new music friday", "pop 2026")) } else null
+                val sa = if (c.spotify.connected.value) async { c.spotify.discover(listOf("arabic hits", "عمرو دياب", "أغاني عربية جديدة")) } else null
+                spNew.value = sn?.await().orEmpty()
+                spArabic.value = sa?.await().orEmpty()
                 val rt = t.await(); val rf = f.await(); val rl = l?.await(); val ra = a?.await()
                 trending.value = rt.getOrDefault(emptyList())
                 forYou.value = rf.getOrDefault(emptyList())
@@ -89,7 +95,10 @@ fun HomeScreen(onAudio: () -> Unit, onSources: () -> Unit) {
     val latest by vm.latest.collectAsState()
     val arabic by vm.arabic.collectAsState()
     val version by c.repo.sourcesVersion.collectAsState()
-    LaunchedEffect(version) { vm.refresh() }
+    val spConnected by c.spotify.connected.collectAsState()
+    val spNew by vm.spNew.collectAsState()
+    val spArabic by vm.spArabic.collectAsState()
+    LaunchedEffect(version, spConnected) { vm.refresh() }
     val hasJamendo = c.repo.hasJamendo
 
     LazyColumn(Modifier.fillMaxWidth()) {
@@ -167,6 +176,24 @@ fun HomeScreen(onAudio: () -> Unit, onSources: () -> Unit) {
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) { itemsIndexed(arabic) { i, t -> TrackCard(t) { c.player.playTracks(arabic, i) } } }
+            }
+        }
+        if (spNew.isNotEmpty()) {
+            item {
+                SectionTitle("جديد من Spotify")
+                LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) { itemsIndexed(spNew) { i, t -> TrackCard(t) { c.player.playTracks(spNew, i) } } }
+            }
+        }
+        if (spArabic.isNotEmpty()) {
+            item {
+                SectionTitle("عربي من Spotify")
+                LazyRow(
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) { itemsIndexed(spArabic) { i, t -> TrackCard(t) { c.player.playTracks(spArabic, i) } } }
             }
         }
         if (forYou.isNotEmpty()) {

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -260,5 +261,34 @@ fun MiniPlayer(onOpen: () -> Unit) {
             color = MaterialTheme.colorScheme.primary,
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
         )
+    }
+}
+
+@Composable
+fun SpotifyBar() {
+    val c = LocalApp.current
+    val now by c.spotify.nowPlaying.collectAsState()
+    val n = now ?: return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Artwork(n.artworkUrl, Modifier.size(40.dp), corner = 6.dp)
+        Column(Modifier.weight(1f)) {
+            Text(n.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                "Spotify · " + n.artist, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onPrimaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        IconButton(onClick = { c.spotify.previous() }) { Icon(Icons.Filled.SkipPrevious, "السابق") }
+        IconButton(onClick = { c.spotify.togglePlay() }) {
+            Icon(if (n.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "تشغيل/إيقاف")
+        }
+        IconButton(onClick = { c.spotify.next() }) { Icon(Icons.Filled.SkipNext, "التالي") }
     }
 }
